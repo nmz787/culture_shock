@@ -23,6 +23,7 @@ class App(tk.Frame):
         self.serial_port = serial_port
         self.npoints = 2048
         self.Line1 = [0 for x in range(self.npoints)]
+        self.Line2 = [0 for x in range(self.npoints)]
         parent.wm_title(title)
         parent.wm_geometry("800x400")
         self.canvas = tk.Canvas(self, background="white")
@@ -30,34 +31,44 @@ class App(tk.Frame):
         self.canvas.create_line((0, 0, 0, 0), tag='X', fill='darkblue', width=1)
         self.canvas.create_line((0, 0, 0, 0), tag='Y', fill='darkred', width=1)
         self.canvas.create_line((0, 0, 0, 0), tag='Z', fill='darkgreen', width=1)
-        self.canvas.grid(sticky="news", columnspan=7)
+        self.canvas.grid(sticky="news", columnspan=7, row=0)
+
+        self.canvas2 = tk.Canvas(self, background="white")
+        self.canvas2.bind("<Configure>", self.on_resize)
+        self.canvas2.create_line((0, 0, 0, 0), tag='X', fill='darkblue', width=1)
+        self.canvas2.create_line((0, 0, 0, 0), tag='Y', fill='darkred', width=1)
+        self.canvas2.create_line((0, 0, 0, 0), tag='Z', fill='darkgreen', width=1)
+        self.canvas2.grid(sticky="news", columnspan=7, row=1)
+
         self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
         self.grid(sticky="news")
         parent.grid_rowconfigure(0, weight=1)
         parent.grid_columnconfigure(0, weight=1)
         
         # change the command from self.serial_read to self.fake to debug/test the GUI/plotting
-        b = tk.Button(self, text="pulse", width=10, command=self.read_serial).grid(row=1,column=0)
+        #b = tk.Button(self, text="pulse", width=10, command=self.fake).grid(row=2,column=0)
+        b = tk.Button(self, text="pulse", width=10, command=self.read_serial).grid(row=2,column=0)
         self.np = tk.StringVar(); self.np.set(self.np_default.format("None Yet"))
         self.integral = tk.StringVar(); self.integral.set(self.integral_default.format("None Yet"))
-        tk.Label(self, textvariable=self.np).grid(row=1, column=1, sticky="w")
-        tk.Label(self, textvariable=self.integral).grid(row=1, column=3, sticky="w")
+        tk.Label(self, textvariable=self.np).grid(row=2, column=1, sticky="w")
+        tk.Label(self, textvariable=self.integral).grid(row=2, column=3, sticky="w")
 
-        tk.Label(self, text="Period").grid(row=2, column=0,sticky="e")
+        tk.Label(self, text="Period").grid(row=3, column=0,sticky="e")
         self.p = tk.Entry(self)
-        self.p.grid(row=2, column=1,sticky="w")
-        self.p.insert(0, '265')
+        self.p.grid(row=3, column=1,sticky="w")
+        self.p.insert(0, '150')
 
-        tk.Label(self, text="Width").grid(row=2, column=2,sticky="w")
+        tk.Label(self, text="Width").grid(row=3, column=2,sticky="w")
         self.w = tk.Entry(self)
-        self.w.grid(row=2, column=3,sticky="w")
+        self.w.grid(row=3, column=3,sticky="w")
         self.w.insert(0,'1')
 
-        tk.Label(self, text="Num Pulse Pairs").grid(row=2, column=4)
+        tk.Label(self, text="Num Pulse Pairs").grid(row=3, column=4)
         self.n_pulses = tk.Entry(self)
-        self.n_pulses.grid(row=2, column=5)
-        self.n_pulses.insert(0,'5')
+        self.n_pulses.grid(row=3, column=5)
+        self.n_pulses.insert(0,'2')
         
         
     def fake(self):
@@ -65,6 +76,7 @@ class App(tk.Frame):
         d = [int(random.random()*1024) for i in range(self.npoints)]
         for s in d:
             self.append_value(s)
+            self.append_value2(s)
         self.after_idle(self.replot)
 
     def on_resize(self, event):
@@ -77,6 +89,7 @@ class App(tk.Frame):
         request.
         """
         self.Line1 = [0 for x in range(self.npoints)]
+        self.Line2 = [0 for x in range(self.npoints)]
 
         # open the command passed in from the command-line
         a=pexpect.spawn(self.serial_port)
@@ -120,8 +133,14 @@ class App(tk.Frame):
                 csv = matches.groups()[0]
                 new_list = [int(s.strip()) for s in csv.split(',')]
                 #print('before ({})'.format(new_list))
+                flip=1
                 for s in new_list:
-                    self.append_value(s)
+                    if flip:
+                        self.append_value(s)
+                        flip=0
+                    else:
+                        self.append_value2(s)
+                        flip=1
                 self.after_idle(self.replot)
                 non_zeroes = [i for i in new_list if i>0]
                 self.integral.set(self.integral_default.format(sum(non_zeroes)))
@@ -136,6 +155,16 @@ class App(tk.Frame):
         self.Line1.pop(0)
         return
 
+    def append_value2(self, x):
+        """
+        Update the cached data lists with new sensor values.
+        """
+        self.Line2.append(float(x))
+        # remove the first item,
+        #self.Line1 = self.Line1[-1 * self.npoints:]
+        self.Line2.pop(0)
+        return
+
     def replot(self):
         """
         Update the canvas graph lines from the cached data lists.
@@ -143,7 +172,7 @@ class App(tk.Frame):
         be resized by the user.
         """
         w = self.winfo_width()
-        h = self.winfo_height()
+        h = self.winfo_height()/2
         max_all = 1024 # 1e-5 # max(self.Line1) + 1e-5
         
         coordsX = []
@@ -152,6 +181,13 @@ class App(tk.Frame):
             coordsX.append(x)
             coordsX.append(h - ((h * (self.Line1[n]+100)) / max_all))
         self.canvas.coords('X', *coordsX)
+
+        coordsXX = []
+        for n in range(0, self.npoints):
+            x = (w * n) / self.npoints
+            coordsXX.append(x)
+            coordsXX.append(h - ((h * (self.Line2[n]+100)) / max_all))
+        self.canvas2.coords('X', *coordsXX)
 
 
 def main(args = None):

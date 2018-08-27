@@ -45,8 +45,13 @@ period = 265
 width = 1
 number_of_pulse_pairs = 5
 common_prescaler = 11
-
+force_inactive_tim1()
+force_inactive_tim2()
+force_inactive_tim5()
 enable_gpio_and_timers()
+force_inactive_tim1()
+force_inactive_tim2()
+force_inactive_tim5()
 # PYFLEX_F401 pin LED_YELLOW,PB9  ==> pyflex_f401.sch LED_YELLOW,PB9
 YEL_LED = Pin('LED_YELLOW', Pin.OUT) 
 # EN_18V_ONBOARD is active HI, (drives base of Q32), U3_!SHDN is inverted EN_18V_ONBOARD.
@@ -62,7 +67,7 @@ EN_18V_U4 = Pin('PB13', Pin.OUT)
 #stm.mem16[stm.TIM4 + stm.TIM_CR1] &= (~1) & 0xFFFF# disable CEN
 
 # PYFLEX_F401 pin JA2 ==> pyflex_f401.sch JA2 ==> chip PA4
-adc = pyb.ADC(pyb.Pin.board.JA2) 
+adc = pyb.ADC(pyb.Pin.board.JA2, pyb.Pin.board.JA17)   #current is PA5 aka JA17
 adc_vals = array.array('H',[0 for i in range(2048)])
 stm.mem32[stm.ADC1 + stm.ADC_CR2] |= 1   #enable ADC
 adc.read_timed(adc_vals)
@@ -226,6 +231,9 @@ def a(period, width, number_pulses=None):
   """ adjust the HV pulser's pulse-to-pulse period, pulse width, and number of push-pull pulse-pairs """
   global number_of_pulse_pairs
   global tim2_channel
+  if not number_pulses:
+  	print('number_pulses must be non-zero')
+  	return
   number_of_pulse_pairs = number_pulses
   adjust_tim5(period, width)
   adjust_tim2(period, width, tim2_channel)
@@ -235,6 +243,11 @@ def a(period, width, number_pulses=None):
 def q(num):
   """ adjust number of pulses for quick-pulsing that seems to produce HV low ripple """
   a(150,4,num)
+  pulse()
+
+def qq(num):
+  """ adjust number of pulses for quick-pulsing that seems to produce HV low ripple """
+  a(250,4,num)
   pulse()
 
 # aa, b, and c are functions that I used during debug of overflow detection
@@ -266,7 +279,7 @@ tim_kickoff = setup_n_pulse_kickoff_timer("TIM3", 1, common_prescaler, period, w
 
 # now setup TIM1 - we want it to disable itself i.e. one-pulse mode; 3 pulses, that goes to repetition counter - as the window is cca 600ms, let make them 50ms ON / 50ms OFF
 stm.mem16[stm.TIM1 + stm.TIM_PSC] = common_prescaler
-adjust_tim1(period=period, width=period//2, number_pulses=number_of_pulse_pairs)
+adjust_tim1(period=period, width=period//2, number_pulses=0)
 
 # 15 14 13 12 11 10 9 8 7 6   5    4    3    2    1    0
 # Reserved                TG  Res. CC4G CC3G CC2G CC1G UG
@@ -360,16 +373,17 @@ def pulse():
   adc.read_timed(adc_vals)
   #stm.mem16[stm.TIM4 + stm.TIM_CR1] |= 1 # CEN -- start ADC callback
   if rep_counter_overflow_detector.longer_counter==1:
-    stm.mem16[tim_kickoff + stm.TIM_CR1] |= 1
     stm.mem16[stm.TIM1 + stm.TIM_RCR] = rep_counter_overflow_detector.or_in_end
+    stm.mem16[tim_kickoff + stm.TIM_CR1] |= 1
   else:
     stm.mem16[tim_kickoff + stm.TIM_CR1] |= 1
   adc.read_timed_stop()
   print('done')
 
 def timers_init():
-  a(33,11,1)
-  pulse()
+  #a(33,11,1)
+  q(1)
+  #pulse()
 
 # increase the TIM1 Update Interrupt priority, by lowering it's number all the way to 1
 # stm.mem8[0xe000e400+25]=1<<4
@@ -389,17 +403,20 @@ nvic_set_prio(25, 0)
 
 
 # make sure PA0 PA1, PA2 are output LO state
-timers_init() 
+#timers_init() 
+pyb.delay(500)
 
-YEL_LED.value(1)
-EN_18V_ONBOARD.value(1)
+#YEL_LED.value(1)
+#EN_18V_ONBOARD.value(1)
 #EN_18V_U4.value(0)
-pyb.delay(900)
-
-YEL_LED.value(0)
+#pyb.delay(900)
+force_inactive_tim1()
+force_inactive_tim2()
+force_inactive_tim5()
+#YEL_LED.value(0)
 EN_18V_ONBOARD.value(0)
 #EN_18V_U4.value(1)
-pyb.delay(2000)
+#pyb.delay(2000)
 
 
 YEL_LED.value(1)

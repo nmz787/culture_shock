@@ -321,6 +321,8 @@ def adjust_tim2(period, width, tim_channel):
 
 def adjust_tim1_pulses(number_pulses):
   number_pulses = (number_pulses * 2) - 1
+  if number_pulses<1:
+    number_pulses=1
   stm.mem16[stm.TIM1 + stm.TIM_RCR] = (stm.mem16[stm.TIM1 + stm.TIM_RCR] 
                                       & 0xff<<8) | ((number_pulses - 1) & 0xff)
 
