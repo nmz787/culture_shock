@@ -102,6 +102,7 @@ class App(tk.Frame):
         a.sendline('\r')
         a.expect('>>>')
         # send CTRL-D to refresh the filesystem
+        print('sending CTRL-D')
         a.sendcontrol('d')
         #a.sendline('\r\n')
         a.expect('>>>')

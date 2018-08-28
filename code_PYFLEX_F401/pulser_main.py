@@ -71,7 +71,7 @@ adc = pyb.ADC(pyb.Pin.board.JA2, pyb.Pin.board.JA17)   #current is PA5 aka JA17
 adc_vals = array.array('H',[0 for i in range(2048)])
 stm.mem32[stm.ADC1 + stm.ADC_CR2] |= 1   #enable ADC
 adc.read_timed(adc_vals)
-adc.read_timed_stop()
+adc.read_timed_stop(0,0)
 
 
 def reset_vals():
@@ -371,13 +371,14 @@ def pulse():
   # enable OPM
   #reset_vals()
   adc.read_timed(adc_vals)
-  #stm.mem16[stm.TIM4 + stm.TIM_CR1] |= 1 # CEN -- start ADC callback
-  if rep_counter_overflow_detector.longer_counter==1:
-    stm.mem16[stm.TIM1 + stm.TIM_RCR] = rep_counter_overflow_detector.or_in_end
-    stm.mem16[tim_kickoff + stm.TIM_CR1] |= 1
-  else:
-    stm.mem16[tim_kickoff + stm.TIM_CR1] |= 1
-  adc.read_timed_stop()
+  # if rep_counter_overflow_detector.longer_counter==1:
+  #   stm.mem16[stm.TIM1 + stm.TIM_RCR] = rep_counter_overflow_detector.or_in_end
+  #   stm.mem16[tim_kickoff + stm.TIM_CR1] |= 1
+  # else:
+  #   stm.mem16[tim_kickoff + stm.TIM_CR1] |= 1
+  npulse_will_overflow = int(rep_counter_overflow_detector==1)
+  # assumes tim_kickoff is TIM3 for now
+  adc.read_timed_stop(npulse_will_overflow, rep_counter_overflow_detector.or_in_end)
   print('done')
 
 def timers_init():
@@ -414,7 +415,7 @@ force_inactive_tim1()
 force_inactive_tim2()
 force_inactive_tim5()
 #YEL_LED.value(0)
-EN_18V_ONBOARD.value(0)
+EN_18V_ONBOARD.value(1)
 #EN_18V_U4.value(1)
 #pyb.delay(2000)
 
