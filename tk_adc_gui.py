@@ -115,6 +115,7 @@ class App(tk.Frame):
         self._expect(sp, '>>>')
         print('got REPL')
         # send CTRL-D to refresh the filesystem
+        print('sending CTRL-D')
         sp.write(b'^d\r')
         #a.sendline('\r\n')
         self._expect(sp, '>>>')

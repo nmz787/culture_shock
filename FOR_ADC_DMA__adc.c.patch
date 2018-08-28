@@ -1,5 +1,5 @@
 diff --git a/ports/stm32/adc.c b/ports/stm32/adc.c
-index 9a0dc56..44034be 100644
+index 9a0dc56..bd75109 100644
 --- a/ports/stm32/adc.c
 +++ b/ports/stm32/adc.c
 @@ -31,6 +31,7 @@
@@ -130,8 +130,8 @@ index 9a0dc56..44034be 100644
 +    //DMA_HandleTypeDef DMA_Handle = adc_obj->DMA_Handle;
 +    __HAL_LINKDMA(adcHandle, DMA_Handle, adc_obj->DMA_Handle);
 +
-+}
-+
+ }
+ 
 +STATIC void adc_config_channel_pyflex(ADC_HandleTypeDef *adc_handle, uint32_t channel, uint32_t rank) {
 +    ADC_ChannelConfTypeDef sConfig;
 +
@@ -149,8 +149,8 @@ index 9a0dc56..44034be 100644
 +    sConfig.Offset = 0;
 +
 +    HAL_ADC_ConfigChannel(adc_handle, &sConfig);
- }
- 
++}
++
 +
  STATIC void adc_config_channel(ADC_HandleTypeDef *adc_handle, uint32_t channel) {
      ADC_ChannelConfTypeDef sConfig;
@@ -206,7 +206,7 @@ index 9a0dc56..44034be 100644
      adc_init_single(o);
  
      return o;
-@@ -363,84 +430,109 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_1(adc_read_obj, adc_read);
+@@ -363,84 +430,150 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_1(adc_read_obj, adc_read);
  ///         print(val)                      # print the value out
  ///
  /// This function does not allocate any memory.
@@ -242,68 +242,31 @@ index 9a0dc56..44034be 100644
 +    //     // use the supplied timer object as the sampling time base
 +    //     tim = pyb_timer_get_handle(freq_in);
 +    // }
- 
--    // configure the ADC channel
--    adc_config_channel(&self->handle, self->channel);
++
 +    
 +    // void adjust_tim2(uint32_t period, uint32_t width) {
 +    //     TIM2->ARR = period;
 +    //     TIM2->CCR1 = period - width;
 +    // }
++
++
  
--    // This uses the timer in polling mode to do the sampling
--    // TODO use DMA
+     // configure the ADC channel
+-    adc_config_channel(&self->handle, self->channel);
++    adc_config_channel_pyflex(&self->handle, self->channel, 1);
++    adc_config_channel_pyflex(&self->handle, self->channel1, 2);
  
--    uint nelems = bufinfo.len / typesize;
+     // This uses the timer in polling mode to do the sampling
+     // TODO use DMA
+ 
++
++
+     uint nelems = bufinfo.len / typesize;
 -    for (uint index = 0; index < nelems; index++) {
 -        // Wait for the timer to trigger so we sample at the correct frequency
 -        while (__HAL_TIM_GET_FLAG(tim, TIM_FLAG_UPDATE) == RESET) {
 -        }
 -        __HAL_TIM_CLEAR_FLAG(tim, TIM_FLAG_UPDATE);
- 
--        if (index == 0) {
--            // for the first sample we need to turn the ADC on
--            HAL_ADC_Start(&self->handle);
--        } else {
--            // for subsequent samples we can just set the "start sample" bit
--#if defined(MCU_SERIES_F4) || defined(MCU_SERIES_F7)
--            ADCx->CR2 |= (uint32_t)ADC_CR2_SWSTART;
--#elif defined(MCU_SERIES_L4)
--            SET_BIT(ADCx->CR, ADC_CR_ADSTART);
--#else
--            #error Unsupported processor
--#endif
--        }
-+    // configure the ADC channel
-+    adc_config_channel_pyflex(&self->handle, self->channel, 1);
-+    adc_config_channel_pyflex(&self->handle, self->channel1, 2);
- 
--        // wait for sample to complete
--        #define READ_TIMED_TIMEOUT (10) // in ms
--        adc_wait_for_eoc_or_timeout(READ_TIMED_TIMEOUT);
-+    // This uses the timer in polling mode to do the sampling
-+    // TODO use DMA
- 
--        // read value
--        uint value = ADCx->DR;
- 
--        // store value in buffer
--        if (typesize == 1) {
--            value >>= 4;
--        }
--        mp_binary_set_val_array_from_int(bufinfo.typecode, bufinfo.buf, index, value);
--    }
- 
--    // turn the ADC off
--    HAL_ADC_Stop(&self->handle);
--
--    #if defined(TIM6)
--    if (mp_obj_is_integer(freq_in)) {
--        // stop timer if we initialised TIM6 in this function (legacy behaviour)
--        HAL_TIM_Base_Stop(tim);
--    }
--    #endif
-+    uint nelems = bufinfo.len / typesize;
 +    //HAL_ADC_Start_DMA(&self->handle, (uint32_t *)bufinfo.buf + (typesize*self->adc_i), 1);
 +    HAL_ADC_Start_DMA(&self->handle, bufinfo.buf, nelems);
 +    
@@ -351,20 +314,92 @@ index 9a0dc56..44034be 100644
 +//     }
 +//     #endif
  
-     return mp_obj_new_int(bufinfo.len);
- }
--STATIC MP_DEFINE_CONST_FUN_OBJ_3(adc_read_timed_obj, adc_read_timed);
+-        if (index == 0) {
+-            // for the first sample we need to turn the ADC on
+-            HAL_ADC_Start(&self->handle);
+-        } else {
+-            // for subsequent samples we can just set the "start sample" bit
+-#if defined(MCU_SERIES_F4) || defined(MCU_SERIES_F7)
+-            ADCx->CR2 |= (uint32_t)ADC_CR2_SWSTART;
+-#elif defined(MCU_SERIES_L4)
+-            SET_BIT(ADCx->CR, ADC_CR_ADSTART);
+-#else
+-            #error Unsupported processor
+-#endif
+-        }
++    return mp_obj_new_int(bufinfo.len);
++}
 +STATIC MP_DEFINE_CONST_FUN_OBJ_2(adc_read_timed_obj, adc_read_timed);
-+
-+STATIC mp_obj_t adc_read_timed_stop(mp_obj_t self_in) {
+ 
+-        // wait for sample to complete
+-        #define READ_TIMED_TIMEOUT (10) // in ms
+-        adc_wait_for_eoc_or_timeout(READ_TIMED_TIMEOUT);
++STATIC uint32_t ensure_input_is_int(mp_obj_t input){
++    if (MP_OBJ_IS_INT(input)) {
++        return (mp_obj_get_int(input));
++    } else {
++        nlr_raise(mp_obj_new_exception_msg_varg(&mp_type_ValueError, "input to ADC.read_timed_stop must be int!", input));
++    }
++}
+ 
+-        // read value
+-        uint value = ADCx->DR;
++STATIC mp_obj_t adc_read_timed_stop(mp_obj_t self_in, mp_obj_t first, mp_obj_t second) {
++    uint32_t npulse_will_overflow = ensure_input_is_int(first);
++    uint32_t or_in_end = ensure_input_is_int(second);
 +    pyb_obj_adc_t *self = self_in;
++    uint value = 0;
++    uint16_t tim2_pwm_defaults = TIM2->CCMR2;
++    tim2_pwm_defaults &= 36751; // 0b1000111110001111  # OC2M "000"....OC1M "000" AND
+ 
+-        // store value in buffer
+-        if (typesize == 1) {
+-            value >>= 4;
+-        }
+-        mp_binary_set_val_array_from_int(bufinfo.typecode, bufinfo.buf, index, value);
++    if (npulse_will_overflow) {
++        TIM1->RCR = or_in_end;
+     }
++    TIM3->CR1 |= 1;
 +    // wait for DMA to complete:  could use ISR/callback
 +    // could do some control looping here!
-+    while (self->DMA_Handle.Instance->CR & DMA_SxCR_EN);   // spin stream 0
+ 
+-    // turn the ADC off
+-    HAL_ADC_Stop(&self->handle);
++    while(TIM2->CR1 & TIM_CR1_CEN){
++        // Wait for the timer to trigger so we sample at the correct frequency
++        //while (__HAL_TIM_GET_FLAG(tim, TIM_FLAG_UPDATE) == RESET) {
++        while(((TIM2->SR & TIM_FLAG_UPDATE)==TIM_FLAG_UPDATE)==RESET){
++        }
++        //__HAL_TIM_CLEAR_FLAG(tim, TIM_FLAG_UPDATE);
++        TIM2->SR = ~TIM_FLAG_UPDATE;
++        value = ADCx->DR;
++        if (value>300){
++            TIM2->CCMR1 = tim2_pwm_defaults | 16448; // 0b0100000001000000  # OC2M "100"....OC1M "100" OR
++        }
++        else if (value<285){
++            TIM2->CCMR1 = tim2_pwm_defaults | 28784; // 0b0111000001110000 # OC3M "111" OR
++        }
+ 
+-    #if defined(TIM6)
+-    if (mp_obj_is_integer(freq_in)) {
+-        // stop timer if we initialised TIM6 in this function (legacy behaviour)
+-        HAL_TIM_Base_Stop(tim);
+     }
+-    #endif
+ 
+-    return mp_obj_new_int(bufinfo.len);
++    while (self->DMA_Handle.Instance->CR & DMA_SxCR_EN)   // spin stream 0
++    {
++        //force_inactive_tim5() # disables 'push' (first pulse in pair)
++        //force_inactive_tim2() #disables 'pull' (second pulse in pair)
++
++    }
 +    HAL_ADC_Stop_DMA(&self->handle);
 +    return mp_const_none;
-+}
-+STATIC MP_DEFINE_CONST_FUN_OBJ_1(adc_read_timed_stop_obj, adc_read_timed_stop);
+ }
+-STATIC MP_DEFINE_CONST_FUN_OBJ_3(adc_read_timed_obj, adc_read_timed);
++STATIC MP_DEFINE_CONST_FUN_OBJ_3(adc_read_timed_stop_obj, adc_read_timed_stop);
  
  STATIC const mp_rom_map_elem_t adc_locals_dict_table[] = {
      { MP_ROM_QSTR(MP_QSTR_read), MP_ROM_PTR(&adc_read_obj) },
@@ -373,7 +408,7 @@ index 9a0dc56..44034be 100644
  };
  
  STATIC MP_DEFINE_CONST_DICT(adc_locals_dict, adc_locals_dict_table);
-@@ -459,6 +551,7 @@ const mp_obj_type_t pyb_adc_type = {
+@@ -459,6 +592,7 @@ const mp_obj_type_t pyb_adc_type = {
  typedef struct _pyb_adc_all_obj_t {
      mp_obj_base_t base;
      ADC_HandleTypeDef handle;
@@ -381,7 +416,7 @@ index 9a0dc56..44034be 100644
  } pyb_adc_all_obj_t;
  
  void adc_init_all(pyb_adc_all_obj_t *adc_all, uint32_t resolution, uint32_t en_mask) {
-@@ -495,21 +588,21 @@ void adc_init_all(pyb_adc_all_obj_t *adc_all, uint32_t resolution, uint32_t en_m
+@@ -495,21 +629,21 @@ void adc_init_all(pyb_adc_all_obj_t *adc_all, uint32_t resolution, uint32_t en_m
      ADC_HandleTypeDef *adcHandle = &adc_all->handle;
      adcHandle->Instance = ADCx;
      adcHandle->Init.Resolution            = resolution;
@@ -408,7 +443,7 @@ index 9a0dc56..44034be 100644
      adcHandle->Init.ExternalTrigConv      = ADC_EXTERNALTRIG_T1_CC1;
      adcHandle->Init.LowPowerAutoWait      = DISABLE;
      adcHandle->Init.Overrun               = ADC_OVR_DATA_PRESERVED;
-@@ -519,6 +612,31 @@ void adc_init_all(pyb_adc_all_obj_t *adc_all, uint32_t resolution, uint32_t en_m
+@@ -519,6 +653,31 @@ void adc_init_all(pyb_adc_all_obj_t *adc_all, uint32_t resolution, uint32_t en_m
  #endif
  
      HAL_ADC_Init(adcHandle);
@@ -440,3 +475,116 @@ index 9a0dc56..44034be 100644
  }
  
  uint32_t adc_config_and_read_channel(ADC_HandleTypeDef *adcHandle, uint32_t channel) {
+@@ -537,62 +696,6 @@ int adc_get_resolution(ADC_HandleTypeDef *adcHandle) {
+     return 12;
+ }
+ 
+-int adc_read_core_temp(ADC_HandleTypeDef *adcHandle) {
+-    int32_t raw_value = adc_config_and_read_channel(adcHandle, ADC_CHANNEL_TEMPSENSOR);
+-
+-    // Note: constants assume 12-bit resolution, so we scale the raw value to
+-    //       be 12-bits.
+-    raw_value <<= (12 - adc_get_resolution(adcHandle));
+-
+-    return ((raw_value - CORE_TEMP_V25) / CORE_TEMP_AVG_SLOPE) + 25;
+-}
+-
+-#if MICROPY_PY_BUILTINS_FLOAT
+-// correction factor for reference value
+-STATIC volatile float adc_refcor = 1.0f;
+-
+-float adc_read_core_temp_float(ADC_HandleTypeDef *adcHandle) {
+-    int32_t raw_value = adc_config_and_read_channel(adcHandle, ADC_CHANNEL_TEMPSENSOR);
+-
+-    // constants assume 12-bit resolution so we scale the raw value to 12-bits
+-    raw_value <<= (12 - adc_get_resolution(adcHandle));
+-
+-    float core_temp_avg_slope = (*ADC_CAL2 - *ADC_CAL1) / 80.0;
+-    return (((float)raw_value * adc_refcor - *ADC_CAL1) / core_temp_avg_slope) + 30.0f;
+-}
+-
+-float adc_read_core_vbat(ADC_HandleTypeDef *adcHandle) {
+-    uint32_t raw_value = adc_config_and_read_channel(adcHandle, ADC_CHANNEL_VBAT);
+-
+-    // Note: constants assume 12-bit resolution, so we scale the raw value to
+-    //       be 12-bits.
+-    raw_value <<= (12 - adc_get_resolution(adcHandle));
+-
+-    #if defined(MCU_SERIES_F4) || defined(MCU_SERIES_F7)
+-    // ST docs say that (at least on STM32F42x and STM32F43x), VBATE must
+-    // be disabled when TSVREFE is enabled for TEMPSENSOR and VREFINT
+-    // conversions to work.  VBATE is enabled by the above call to read
+-    // the channel, and here we disable VBATE so a subsequent call for
+-    // TEMPSENSOR or VREFINT works correctly.
+-    ADC->CCR &= ~ADC_CCR_VBATE;
+-    #endif
+-
+-    return raw_value * VBAT_DIV * ADC_SCALE * adc_refcor;
+-}
+-
+-float adc_read_core_vref(ADC_HandleTypeDef *adcHandle) {
+-    uint32_t raw_value = adc_config_and_read_channel(adcHandle, ADC_CHANNEL_VREFINT);
+-
+-    // Note: constants assume 12-bit resolution, so we scale the raw value to
+-    //       be 12-bits.
+-    raw_value <<= (12 - adc_get_resolution(adcHandle));
+-
+-    // update the reference correction factor
+-    adc_refcor = ((float)(*VREFIN_CAL)) / ((float)raw_value);
+-
+-    return (*VREFIN_CAL) * ADC_SCALE;
+-}
+-#endif
+ 
+ /******************************************************************************/
+ /* MicroPython bindings : adc_all object                                      */
+@@ -622,49 +725,9 @@ STATIC mp_obj_t adc_all_read_channel(mp_obj_t self_in, mp_obj_t channel) {
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_2(adc_all_read_channel_obj, adc_all_read_channel);
+ 
+-STATIC mp_obj_t adc_all_read_core_temp(mp_obj_t self_in) {
+-    pyb_adc_all_obj_t *self = self_in;
+-    #if MICROPY_PY_BUILTINS_FLOAT
+-    float data = adc_read_core_temp_float(&self->handle);
+-    return mp_obj_new_float(data);
+-    #else
+-    int data  = adc_read_core_temp(&self->handle);
+-    return mp_obj_new_int(data);
+-    #endif
+-}
+-STATIC MP_DEFINE_CONST_FUN_OBJ_1(adc_all_read_core_temp_obj, adc_all_read_core_temp);
+-
+-#if MICROPY_PY_BUILTINS_FLOAT
+-STATIC mp_obj_t adc_all_read_core_vbat(mp_obj_t self_in) {
+-    pyb_adc_all_obj_t *self = self_in;
+-    float data = adc_read_core_vbat(&self->handle);
+-    return mp_obj_new_float(data);
+-}
+-STATIC MP_DEFINE_CONST_FUN_OBJ_1(adc_all_read_core_vbat_obj, adc_all_read_core_vbat);
+-
+-STATIC mp_obj_t adc_all_read_core_vref(mp_obj_t self_in) {
+-    pyb_adc_all_obj_t *self = self_in;
+-    float data  = adc_read_core_vref(&self->handle);
+-    return mp_obj_new_float(data);
+-}
+-STATIC MP_DEFINE_CONST_FUN_OBJ_1(adc_all_read_core_vref_obj, adc_all_read_core_vref);
+-
+-STATIC mp_obj_t adc_all_read_vref(mp_obj_t self_in) {
+-    pyb_adc_all_obj_t *self = self_in;
+-    adc_read_core_vref(&self->handle);
+-    return mp_obj_new_float(3.3 * adc_refcor);
+-}
+-STATIC MP_DEFINE_CONST_FUN_OBJ_1(adc_all_read_vref_obj, adc_all_read_vref);
+-#endif
+ 
+ STATIC const mp_rom_map_elem_t adc_all_locals_dict_table[] = {
+     { MP_ROM_QSTR(MP_QSTR_read_channel), MP_ROM_PTR(&adc_all_read_channel_obj) },
+-    { MP_ROM_QSTR(MP_QSTR_read_core_temp), MP_ROM_PTR(&adc_all_read_core_temp_obj) },
+-#if MICROPY_PY_BUILTINS_FLOAT
+-    { MP_ROM_QSTR(MP_QSTR_read_core_vbat), MP_ROM_PTR(&adc_all_read_core_vbat_obj) },
+-    { MP_ROM_QSTR(MP_QSTR_read_core_vref), MP_ROM_PTR(&adc_all_read_core_vref_obj) },
+-    { MP_ROM_QSTR(MP_QSTR_read_vref), MP_ROM_PTR(&adc_all_read_vref_obj) },
+-#endif
+ };
+ 
+ STATIC MP_DEFINE_CONST_DICT(adc_all_locals_dict, adc_all_locals_dict_table);
