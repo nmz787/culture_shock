@@ -55,7 +55,8 @@ force_inactive_tim5()
 # PYFLEX_F401 pin LED_YELLOW,PB9  ==> pyflex_f401.sch LED_YELLOW,PB9
 YEL_LED = Pin('LED_YELLOW', Pin.OUT) 
 # EN_18V_ONBOARD is active HI, (drives base of Q32), U3_!SHDN is inverted EN_18V_ONBOARD.
-EN_18V_ONBOARD = Pin('PB14', Pin.OUT) 
+EN_18V_ONBOARD = Pin('PB14', Pin.OUT)
+EN_18V_ONBOARD.value(1)
 EN_18V_U4 = Pin('PB13', Pin.OUT) 
 
 
@@ -70,8 +71,8 @@ EN_18V_U4 = Pin('PB13', Pin.OUT)
 adc = pyb.ADC(pyb.Pin.board.JA2, pyb.Pin.board.JA17)   #current is PA5 aka JA17
 adc_vals = array.array('H',[0 for i in range(2048)])
 stm.mem32[stm.ADC1 + stm.ADC_CR2] |= 1   #enable ADC
-adc.read_timed(adc_vals)
-adc.read_timed_stop(0,0)
+# adc.read_timed(adc_vals)
+# adc.read_timed_stop(0,0, len(adc_vals), adc_vals)
 
 
 def reset_vals():
@@ -220,7 +221,6 @@ tim2_channel = 3
 tim2_3_out = pyb.Pin(pyb.Pin.cpu.A2, pyb.Pin.AF_PP, pyb.Pin.PULL_NONE, 1)  # PA2 set to AF1 --> TIM2_CH3
 tim5_2_out = pyb.Pin(pyb.Pin.cpu.A1, pyb.Pin.AF_PP, pyb.Pin.PULL_NONE, 2)  # PA1 set to AF2 -->  TIM5_CH2
 
-# enable_pb13_af_and_connect_to_tim1()  2018-7-16-jg
 
 # as long as both TIM's tick at AHB freq, the TIM's will tick at the same rate;
 # should there be any APB divider impacting TIM input clock freq,
@@ -378,7 +378,7 @@ def pulse():
   #   stm.mem16[tim_kickoff + stm.TIM_CR1] |= 1
   npulse_will_overflow = int(rep_counter_overflow_detector==1)
   # assumes tim_kickoff is TIM3 for now
-  adc.read_timed_stop(npulse_will_overflow, rep_counter_overflow_detector.or_in_end)
+  adc.read_timed_stop(npulse_will_overflow, rep_counter_overflow_detector.or_in_end, len(adc_vals), adc_vals)
   print('done')
 
 def timers_init():
@@ -405,7 +405,7 @@ nvic_set_prio(25, 0)
 
 # make sure PA0 PA1, PA2 are output LO state
 #timers_init() 
-pyb.delay(500)
+#pyb.delay(500)
 
 #YEL_LED.value(1)
 #EN_18V_ONBOARD.value(1)
@@ -415,7 +415,7 @@ force_inactive_tim1()
 force_inactive_tim2()
 force_inactive_tim5()
 #YEL_LED.value(0)
-EN_18V_ONBOARD.value(1)
+EN_18V_ONBOARD.value(0)
 #EN_18V_U4.value(1)
 #pyb.delay(2000)
 
