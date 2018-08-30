@@ -469,6 +469,7 @@ STATIC mp_obj_t adc_read_timed(mp_obj_t self_in, mp_obj_t buf_in) {
 
     uint nelems = bufinfo.len / typesize;
     //HAL_ADC_Start_DMA(&self->handle, (uint32_t *)bufinfo.buf + (typesize*self->adc_i), 1);
+    // nelems ends up programmed into DMA_SxNDTR
     HAL_ADC_Start_DMA(&self->handle, bufinfo.buf, nelems);
     
 //     for (uint index = 0; index < nelems; index++) {
@@ -527,13 +528,29 @@ STATIC uint32_t ensure_input_is_int(mp_obj_t input){
     }
 }
 
-STATIC mp_obj_t adc_read_timed_stop(mp_obj_t self_in, mp_obj_t first, mp_obj_t second) {
+STATIC mp_obj_t adc_read_timed_stop(mp_uint_t n_args, const mp_obj_t *args) {
+//(mp_obj_t self_in, mp_obj_t first, mp_obj_t second, mp_obj_t third, mp_obj_t buf_in) {
+    mp_obj_t self_in = args[0];
+    mp_obj_t first = args[1];
+    mp_obj_t second = args[2];
+    mp_obj_t third = args[3];
+    mp_obj_t buf_in = args[4];
+    (void)n_args; // unused, we know it's 4
     uint32_t npulse_will_overflow = ensure_input_is_int(first);
     uint32_t or_in_end = ensure_input_is_int(second);
+    uint16_t buf_len = ensure_input_is_int(third);
+    mp_buffer_info_t bufinfo;
+    mp_get_buffer_raise(buf_in, &bufinfo, MP_BUFFER_WRITE);
     pyb_obj_adc_t *self = self_in;
     uint value = 0;
+    uint16_t num_left;
+    uint16_t index;
+    
     uint16_t tim2_pwm_defaults = TIM2->CCMR2;
-    tim2_pwm_defaults &= 36751; // 0b1000111110001111  # OC2M "000"....OC1M "000" AND
+    uint16_t tim5_pwm_defaults = TIM5->CCMR1;
+    tim2_pwm_defaults &= 36751; // 0b1000111110001111  # OC4M "000"....OC3M "000" AND
+    tim5_pwm_defaults &= 36751; // 0b1000111110001111  # OC2M "000"....OC1M "000" AND
+
 
     if (npulse_will_overflow) {
         TIM1->RCR = or_in_end;
@@ -548,13 +565,21 @@ STATIC mp_obj_t adc_read_timed_stop(mp_obj_t self_in, mp_obj_t first, mp_obj_t s
         while(((TIM2->SR & TIM_FLAG_UPDATE)==TIM_FLAG_UPDATE)==RESET){
         }
         //__HAL_TIM_CLEAR_FLAG(tim, TIM_FLAG_UPDATE);
+        num_left = DMA2_Stream0->NDTR;
         TIM2->SR = ~TIM_FLAG_UPDATE;
-        value = ADCx->DR;
+        index = buf_len-num_left;
+        if (index%2==1)
+            index-=1;
+        //ADCx->DR didn't work
+        value = ((uint16_t *)bufinfo.buf)[index]; 
+
         if (value>300){
-            TIM2->CCMR1 = tim2_pwm_defaults | 16448; // 0b0100000001000000  # OC2M "100"....OC1M "100" OR
+            TIM2->CCMR2 = tim2_pwm_defaults | 16448; // 0b0100000001000000  # OC4M "100"....OC3M "100" OR
+            TIM5->CCMR1 = tim5_pwm_defaults | 16448; // 0b0100000001000000  # OC2M "100"....OC1M "100" OR
         }
         else if (value<285){
-            TIM2->CCMR1 = tim2_pwm_defaults | 28784; // 0b0111000001110000 # OC3M "111" OR
+            TIM2->CCMR2 = tim2_pwm_defaults | 28784; // 0b0111000001110000 # OC3M "111" OR
+            TIM5->CCMR1 = tim5_pwm_defaults | 28784; // 0b0111000001110000 # OC2M "111" OR
         }
 
     }
@@ -568,7 +593,7 @@ STATIC mp_obj_t adc_read_timed_stop(mp_obj_t self_in, mp_obj_t first, mp_obj_t s
     HAL_ADC_Stop_DMA(&self->handle);
     return mp_const_none;
 }
-STATIC MP_DEFINE_CONST_FUN_OBJ_3(adc_read_timed_stop_obj, adc_read_timed_stop);
+STATIC MP_DEFINE_CONST_FUN_OBJ_VAR(adc_read_timed_stop_obj, 5, adc_read_timed_stop);
 
 STATIC const mp_rom_map_elem_t adc_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_read), MP_ROM_PTR(&adc_read_obj) },

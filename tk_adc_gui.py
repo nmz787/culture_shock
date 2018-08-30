@@ -3,12 +3,24 @@
 # adapted from https://arduino.stackexchange.com/a/17529
 
 
+# TODO
+# checkout grabbing oscilloscope data after each pulse, and performing some basic checks like the number of requested pulse-pairs versus the actual emitted:
+#
+#>>> import ds1054z.discovery
+#>>> from ds1054z import DS1054Z
+#>>> scope = DS1054Z(ds1054z.discovery.discover_devices()[0]['ip'])
+#>>> scope.get_waveform_samples(1) # grabs channel 1's on-screen buffer... use second arg "RAW"
+
+
+
+
 from __future__ import print_function, division, absolute_import
 import random
 #import pexpect.fdpexpect as pexpect
 import serial
 import time
 import sys
+import os
 import re
 if sys.hexversion > 0x02ffffff:
     import tkinter as tk
@@ -19,6 +31,7 @@ else:
 class App(tk.Frame):
     np_default = 'Num Pulses: {}'
     integral_default = 'Integral: {}'
+    take_screenshots = False
     def __init__(self, parent, title, serial_port):
         tk.Frame.__init__(self, parent)
         self.serial_port = serial_port
@@ -68,9 +81,17 @@ class App(tk.Frame):
 
         tk.Label(self, text="Num Pulse Pairs").grid(row=3, column=4)
         self.n_pulses = tk.Entry(self)
+        self.n_pulses.bind('<Return>', self.num_pulses_pressed)
         self.n_pulses.grid(row=3, column=5)
         self.n_pulses.insert(0,'2')
+
+        self.pressing_num_pulses_starts_pulse = tk.IntVar()
+        self.num_pulses_checkbox = tk.Checkbutton(self, text="", variable=self.pressing_num_pulses_starts_pulse)
+        self.num_pulses_checkbox.grid(row=3, column=6)
         
+    def num_pulses_pressed(self, event):
+        if self.pressing_num_pulses_starts_pulse.get():
+            self.read_serial()
         
     def fake(self):
         #d = [0, 0, 0, 0, 0, 0, 0, 54.0, 77.0, 135.0, 167.0, 184.0, 235.0, 248.0, 361.0, 246.0, 312.0, 288.0, 292.0, 269.0, 265.0, 295.0, 304.0, 284.0, 277.0, 269.0, 307.0, 306.0, 236.0, 277.0, 269.0, 307.0, 292.0, 280.0, 270.0, 310.0, 307.0, 285.0, 276.0, 270.0, 309.0, 252.0, 280.0, 272.0, 314.0, 306.0, 310.0, 254.0, 176.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0]
@@ -155,10 +176,12 @@ class App(tk.Frame):
                     else:
                         self.append_value2(s)
                         flip=1
+                self.take_screenshots = True
                 self.after_idle(self.replot)
                 non_zeroes = [i for i in new_list if i>0]
                 self.integral.set(self.integral_default.format(sum(non_zeroes)))
         sp.close()
+
 
     def append_value(self, x):
         """
@@ -204,6 +227,12 @@ class App(tk.Frame):
             coordsXX.append(h - ((h * (self.Line2[n]+100)) / max_all))
         self.canvas2.coords('X', *coordsXX)
 
+        self.after(100, self.screenshot)
+
+    def screenshot(self):
+        if self.take_screenshots:
+            #os.system('xfce4-screenshooter -s ./pics -f')
+            os.system('shutter -a -e -n -o {}/Screenshot_%y-%m-%d_%T.png'.format(os.path.abspath('./pics')))
 
 def main(args = None):
     if args is None:
