@@ -535,13 +535,25 @@ STATIC mp_obj_t adc_read_timed_stop(mp_uint_t n_args, const mp_obj_t *args) {
     mp_obj_t second = args[2];
     mp_obj_t third = args[3];
     mp_obj_t buf_in = args[4];
+    mp_obj_t limit_threshold_in = args[5];
+    
     (void)n_args; // unused, we know it's 4
+    pyb_obj_adc_t *self = self_in;
     uint32_t npulse_will_overflow = ensure_input_is_int(first);
     uint32_t or_in_end = ensure_input_is_int(second);
     uint16_t buf_len = ensure_input_is_int(third);
+    uint16_t limit_threshold = ensure_input_is_int(limit_threshold_in);
+    uint16_t limit_threshold_lower = limit_threshold - (limit_threshold/10);
+
     mp_buffer_info_t bufinfo;
     mp_get_buffer_raise(buf_in, &bufinfo, MP_BUFFER_WRITE);
-    pyb_obj_adc_t *self = self_in;
+
+    size_t typesize = mp_binary_get_size('@', bufinfo.typecode, NULL);
+    // configure the ADC channel
+    adc_config_channel_pyflex(&self->handle, self->channel, 1);
+    adc_config_channel_pyflex(&self->handle, self->channel1, 2);
+    uint nelems = bufinfo.len / typesize;
+    
     uint value = 0;
     uint16_t num_left;
     uint16_t index;
@@ -550,11 +562,14 @@ STATIC mp_obj_t adc_read_timed_stop(mp_uint_t n_args, const mp_obj_t *args) {
     uint16_t tim5_pwm_defaults = TIM5->CCMR1;
     tim2_pwm_defaults &= 36751; // 0b1000111110001111  # OC4M "000"....OC3M "000" AND
     tim5_pwm_defaults &= 36751; // 0b1000111110001111  # OC2M "000"....OC1M "000" AND
-
+    printf("printf from c shows thresh between %d and %d", limit_threshold_lower, limit_threshold);
 
     if (npulse_will_overflow) {
         TIM1->RCR = or_in_end;
     }
+    //HAL_ADC_Start_DMA(&self->handle, (uint32_t *)bufinfo.buf + (typesize*self->adc_i), 1);
+    // nelems ends up programmed into DMA_SxNDTR
+    HAL_ADC_Start_DMA(&self->handle, bufinfo.buf, nelems);
     TIM3->CR1 |= 1;
     // wait for DMA to complete:  could use ISR/callback
     // could do some control looping here!
@@ -573,11 +588,11 @@ STATIC mp_obj_t adc_read_timed_stop(mp_uint_t n_args, const mp_obj_t *args) {
         //ADCx->DR didn't work
         value = ((uint16_t *)bufinfo.buf)[index]; 
 
-        if (value>300){
+        if (value>limit_threshold){
             TIM2->CCMR2 = tim2_pwm_defaults | 16448; // 0b0100000001000000  # OC4M "100"....OC3M "100" OR
             TIM5->CCMR1 = tim5_pwm_defaults | 16448; // 0b0100000001000000  # OC2M "100"....OC1M "100" OR
         }
-        else if (value<285){
+        else if (value<limit_threshold_lower){
             TIM2->CCMR2 = tim2_pwm_defaults | 28784; // 0b0111000001110000 # OC3M "111" OR
             TIM5->CCMR1 = tim5_pwm_defaults | 28784; // 0b0111000001110000 # OC2M "111" OR
         }

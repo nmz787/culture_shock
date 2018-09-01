@@ -323,7 +323,7 @@ stm.mem16[stm.TIM1 + stm.TIM_CR1]  |= (0
 
 
 @micropython.native
-def pulse():
+def pulse(clamp_thresh):
   global number_of_pulse_pairs
   global adc_vals
   global adc
@@ -367,10 +367,10 @@ def pulse():
   print('trace')
   stm.mem16[stm.TIM1 + stm.TIM_SR] = (stm.mem16[stm.TIM1 + stm.TIM_SR] & 0b111<<13) # clear all flags
   pyb.enable_irq()
-  print('pulsing')
+  print('pulsing to voltage max {}'.format(clamp_thresh))
   # enable OPM
   #reset_vals()
-  adc.read_timed(adc_vals)
+  #adc.read_timed(adc_vals)
   # if rep_counter_overflow_detector.longer_counter==1:
   #   stm.mem16[stm.TIM1 + stm.TIM_RCR] = rep_counter_overflow_detector.or_in_end
   #   stm.mem16[tim_kickoff + stm.TIM_CR1] |= 1
@@ -378,7 +378,7 @@ def pulse():
   #   stm.mem16[tim_kickoff + stm.TIM_CR1] |= 1
   npulse_will_overflow = int(rep_counter_overflow_detector==1)
   # assumes tim_kickoff is TIM3 for now
-  adc.read_timed_stop(npulse_will_overflow, rep_counter_overflow_detector.or_in_end, len(adc_vals), adc_vals)
+  adc.read_timed_stop(npulse_will_overflow, rep_counter_overflow_detector.or_in_end, len(adc_vals), adc_vals, clamp_thresh)
   print('done')
 
 def timers_init():
