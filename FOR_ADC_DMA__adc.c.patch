@@ -130,8 +130,8 @@ index 9a0dc56..e5345db 100644
 +    //DMA_HandleTypeDef DMA_Handle = adc_obj->DMA_Handle;
 +    __HAL_LINKDMA(adcHandle, DMA_Handle, adc_obj->DMA_Handle);
 +
-+}
-+
+ }
+ 
 +STATIC void adc_config_channel_pyflex(ADC_HandleTypeDef *adc_handle, uint32_t channel, uint32_t rank) {
 +    ADC_ChannelConfTypeDef sConfig;
 +
@@ -149,8 +149,8 @@ index 9a0dc56..e5345db 100644
 +    sConfig.Offset = 0;
 +
 +    HAL_ADC_ConfigChannel(adc_handle, &sConfig);
- }
- 
++}
++
 +
  STATIC void adc_config_channel(ADC_HandleTypeDef *adc_handle, uint32_t channel) {
      ADC_ChannelConfTypeDef sConfig;
@@ -363,7 +363,7 @@ index 9a0dc56..e5345db 100644
 -        // read value
 -        uint value = ADCx->DR;
 +    mp_buffer_info_t bufinfo;
-+    tim2_pwm_defaults &= 36751; // 0b1000111110001111  # OC2M "000"....OC1M "000" AND
++    mp_get_buffer_raise(buf_in, &bufinfo, MP_BUFFER_WRITE);
  
 -        // store value in buffer
 -        if (typesize == 1) {
@@ -374,7 +374,7 @@ index 9a0dc56..e5345db 100644
 +    adc_config_channel_pyflex(&self->handle, self->channel1, 2);
 +    uint nelems = bufinfo.len / typesize;
 +    
--        mp_binary_set_val_array_from_int(bufinfo.typecode, bufinfo.buf, index, value);
++    uint value = 0;
 +    uint16_t num_left;
 +    uint16_t index;
 +    
