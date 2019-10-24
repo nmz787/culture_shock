@@ -88,6 +88,9 @@ class App(tk.Frame):
         self.pressing_num_pulses_starts_pulse = tk.IntVar()
         self.num_pulses_checkbox = tk.Checkbutton(self, text="", variable=self.pressing_num_pulses_starts_pulse)
         self.num_pulses_checkbox.grid(row=3, column=6)
+
+        if not os.path.isdir(os.path.abspath('./pics')):
+            os.mkdir('./pics')
         
     def num_pulses_pressed(self, event):
         if self.pressing_num_pulses_starts_pulse.get():
