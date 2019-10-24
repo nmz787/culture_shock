@@ -16,7 +16,8 @@
 
 from __future__ import print_function, division, absolute_import
 import random
-import pexpect
+#import pexpect.fdpexpect as pexpect
+import serial
 import time
 import sys
 import os
@@ -108,6 +109,16 @@ class App(tk.Frame):
     def on_resize(self, event):
         self.replot()
 
+    serial_buffer = ''
+    def _expect(self, serial_obj, expect):
+        while not self.serial_buffer.endswith(expect):
+            c = serial_obj.read(1).decode()
+            self.serial_buffer += c
+            #print(self.serial_buffer)
+        temp = self.serial_buffer
+        self.serial_buffer  = ''
+        return temp
+
     def read_serial(self):
         """
         Check for input from the serial port. On fetching a line, parse
@@ -122,44 +133,46 @@ class App(tk.Frame):
         self.Line2 = [0 for x in range(self.npoints)]
 
         # open the command passed in from the command-line
-        a=pexpect.spawn(self.serial_port)
+        sp=serial.Serial(self.serial_port)
+        #pexpect.fdspawn(sp.fileno)
         
         # log output to the command-line
-        a.logfile=sys.stdout
+        #a.logfile=sys.stdout
         if self.serial_port.startswith('picocom'):
             a.expect('Terminal ready')
         time.sleep(1)
-        a.sendline('\r')
-        a.expect('>>>')
+        sp.write(b'\r')
+        self._expect(sp, '>>>')
+        print('got REPL')
         # send CTRL-D to refresh the filesystem
         print('sending CTRL-D')
-        a.sendcontrol('d')
+        sp.write(b'^d\r')
         #a.sendline('\r\n')
-        a.expect('>>>')
+        self._expect(sp, '>>>')
 
         # call a (adjust) function
-        a.sendline('a({},{},{})\r'.format(self.p.get(), self.w.get(), self.n_pulses.get()))
-        a.expect('>>>')
+        sp.write(bytes('a({},{},{})\r'.format(self.p.get(), self.w.get(), self.n_pulses.get()).encode()))
+        self._expect(sp, '>>>')
 
         # reset ADC array
         ##a.sendline('reset_vals()\r')
         ##a.expect('>>>')
 
         # call pulse function
-        a.sendline('pulse({})\r'.format(self.voltage_clamp_val.get()))
-        a.expect('>>>')
+        sp.write(bytes('pulse({})\r'.format(self.voltage_clamp_val.get()).encode()))
+        self._expect(sp, '>>>')
 
         # print the adc_vals
         # this seems to take a try or two for some reason... 
         # TODO add timeout for this while-loop... so it doesn't lock-up the GUI in case things break for some reason
         matches = None
         while not matches:
-            a.sendline('adc_vals\r')
-            a.expect('>>>')
-            print('a.before adc_vals: {}'.format(a.before))
-            print('a.after adc_vals: {}'.format(a.after))
+            sp.write(b'adc_vals\r')
+            vals = self._expect(sp, '>>>')
+            #print('a.before adc_vals: {}'.format(a.before))
+            #print('a.after adc_vals: {}'.format(a.after))
             # parse the adc_vals list from the terminal
-            matches = re.match(r'[^\[]*\[([^\]]+)\]', a.before)
+            matches = re.match(r'[^\[]*\[([^\]]+)\]', vals)
             if matches:
                 csv = matches.groups()[0]
                 new_list = [int(s.strip()) for s in csv.split(',')]
@@ -176,7 +189,7 @@ class App(tk.Frame):
                 self.after_idle(self.replot)
                 non_zeroes = [i for i in new_list if i>0]
                 self.integral.set(self.integral_default.format(sum(non_zeroes)))
-
+        sp.close()
 
     def append_value(self, x):
         """
@@ -233,8 +246,8 @@ def main(args = None):
     if args is None:
         args = sys.argv
 
-    if len(args) == 3:
-        serial_port = '{} {}'.format(args[1], args[2])
+    if len(args) == 2:
+        serial_port = '{}'.format(args[1])
         root = tk.Tk()
         print(serial_port)
         app = App(root, "Culture Shock!", serial_port)
