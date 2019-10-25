@@ -45,14 +45,14 @@ class App(tk.Frame):
         self.canvas.create_line((0, 0, 0, 0), tag='X', fill='darkblue', width=1)
         self.canvas.create_line((0, 0, 0, 0), tag='Y', fill='darkred', width=1)
         self.canvas.create_line((0, 0, 0, 0), tag='Z', fill='darkgreen', width=1)
-        self.canvas.grid(sticky="news", columnspan=7, row=0)
+        self.canvas.grid(sticky="news", columnspan=8, row=0)
 
         self.canvas2 = tk.Canvas(self, background="white")
         self.canvas2.bind("<Configure>", self.on_resize)
         self.canvas2.create_line((0, 0, 0, 0), tag='X', fill='darkblue', width=1)
         self.canvas2.create_line((0, 0, 0, 0), tag='Y', fill='darkred', width=1)
         self.canvas2.create_line((0, 0, 0, 0), tag='Z', fill='darkgreen', width=1)
-        self.canvas2.grid(sticky="news", columnspan=7, row=1)
+        self.canvas2.grid(sticky="news", columnspan=8, row=1)
 
         self.grid_rowconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
@@ -85,10 +85,14 @@ class App(tk.Frame):
         self.n_pulses.grid(row=3, column=5)
         self.n_pulses.insert(0,'2')
 
+        tk.Label(self, text="Voltage Clamp Threshold").grid(row=3, column=6)
+        self.voltage_clamp_val = tk.Entry(self)
+        self.voltage_clamp_val.grid(row=3, column=7)
+        self.voltage_clamp_val.insert(0,'300')
+
         self.pressing_num_pulses_starts_pulse = tk.IntVar()
         self.num_pulses_checkbox = tk.Checkbutton(self, text="", variable=self.pressing_num_pulses_starts_pulse)
-        self.num_pulses_checkbox.grid(row=3, column=6)
-
+        self.num_pulses_checkbox.grid(row=2, column=5)
         if not os.path.isdir(os.path.abspath('./pics')):
             os.mkdir('./pics')
         
@@ -123,6 +127,10 @@ class App(tk.Frame):
         the sensor values and append to the stored data and post a replot
         request.
         """
+        if not self.p.get() or not self.w.get() or not self.n_pulses.get():
+            print('one of the parameters was empty or 0 - please correct and try again')
+            return
+
         self.Line1 = [0 for x in range(self.npoints)]
         self.Line2 = [0 for x in range(self.npoints)]
 
@@ -153,7 +161,7 @@ class App(tk.Frame):
         ##a.expect('>>>')
 
         # call pulse function
-        sp.write(b'pulse()\r')
+        sp.write(bytes('pulse({})\r'.format(self.voltage_clamp_val.get()).encode()))
         self._expect(sp, '>>>')
 
         # print the adc_vals
@@ -235,7 +243,7 @@ class App(tk.Frame):
     def screenshot(self):
         if self.take_screenshots:
             #os.system('xfce4-screenshooter -s ./pics -f')
-            os.system('shutter -a -e -n -o {}/Screenshot_%y-%m-%d_%T.png'.format(os.path.abspath('./pics')))
+            pass #os.system('shutter -a -e -n -o {}/Screenshot_%y-%m-%d_%T.png'.format(os.path.abspath('./pics')))
 
 def main(args = None):
     if args is None:
